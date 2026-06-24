@@ -9,12 +9,14 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    
+
     // 1. CRITICAL GUARD: Extract the exact payload parameters sent by page.jsx
     const id = body?.id;
     const decision = body?.decision;
 
-    // 2. DEFENSE: If either parameter is missing, stop it BEFORE it reaches Supabase
+    // 2. DEFENSE: Validate both parameters exist and decision is an allowed value
+    const ALLOWED_DECISIONS = ['accepted', 'waitlisted', 'rejected'];
+
     if (!id || !decision) {
       console.error("=== INVALID DECISION PAYLOAD ===", body);
       return NextResponse.json(
@@ -23,10 +25,18 @@ export async function POST(request) {
       );
     }
 
+    if (!ALLOWED_DECISIONS.includes(decision)) {
+      console.error("=== INVALID DECISION VALUE ===", decision);
+      return NextResponse.json(
+        { error: `Invalid decision value: ${decision}. Must be one of: ${ALLOWED_DECISIONS.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // 3. Update the row status dynamically
     const { data, error } = await supabase
       .from(TABLE_NAME)
-      .update({ 
+      .update({
         status: decision // Updates 'status' column to 'accepted', 'waitlisted', or 'rejected'
       })
       .eq('id', id)

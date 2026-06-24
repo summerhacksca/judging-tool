@@ -15,7 +15,7 @@ export async function GET(request) {
   let isNewSession = false;
 
   if (!reviewerId) {
-    reviewerId = 'rev_' + Math.random().toString(36).substring(2, 11);
+    reviewerId = 'rev_' + crypto.randomUUID();
     isNewSession = true;
   }
 
@@ -32,7 +32,7 @@ export async function GET(request) {
       return NextResponse.json({ error: applicationError.message }, { status: 500 });
     }
 
-    // 2. FIXED: Run a completely clean, un-bundled standalone count query. 
+    // 2. FIXED: Run a completely clean, un-bundled standalone count query.
     // This replicates exactly how the directory fetches rows, avoiding RPC transaction side-effects.
     const { count, error: countError } = await supabase
       .from(TABLE_NAME)

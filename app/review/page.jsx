@@ -33,6 +33,35 @@ function humanizeKey(key) {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
+// Priority ordering for application fields so the review layout flows logically.
+const FIELD_ORDER = [
+  'firstnamelegal', 'preferredname', 'preferredfirstname',
+  'lastnamelegal',
+  'gender', 'pronouns', 'age', 'dateofbirth',
+  'phonenumber', 'phonenumber2',
+  'currentlevelofstudy', 'school', 'graduationyear', 'major', 'fieldofstudy', 'education',
+  'github', 'linkedin', 'portfolio', 'portfoliolink', 'portfoliourl', 'website', 'devpost',
+  'resumelink', 'resume',
+  'skills', 'experience', 'previouslyparticipated', 'previoushackathons', 'hackathonexperience', 'numberhackathonsattended',
+  'whythisorganization', 'whyapply', 'whythisprogram', 'whythisinternship', 'whythishackathon',
+  'whatyouwillbuild', 'projectidea', 'technicalexperience', 'interestareas', 'otherlinks',
+  'city', 'state', 'country',
+  'tshirtsize', 'shirtsize', 'dietaryrestrictions', 'dietaryrestrictionsother', 'allergies', 'allergiesother', 'accessibilityneeds',
+  'codeofconduct', 'mlhpolicies', 'shareinformation', 'shareinfo', 'privacypolicy', 'termsandconditions',
+];
+
+const NAME_FIELDS = new Set(['firstnamelegal', 'preferredname', 'preferredfirstname', 'lastnamelegal']);
+
+function isNameField(key) {
+  return NAME_FIELDS.has(key.replace(/[_-]+/g, '').toLowerCase());
+}
+
+function fieldSortWeight(key) {
+  const normalised = key.replace(/[_-]+/g, '').toLowerCase();
+  const index = FIELD_ORDER.indexOf(normalised);
+  return index === -1 ? 999 : index;
+}
+
 function formatDateTime(value) {
   if (!value) return 'Unknown date';
   const date = new Date(value);
@@ -69,9 +98,9 @@ function renderFieldValue(value) {
     }
     if (value.length > 200) {
       return (
-        <pre className="max-h-40 overflow-auto rounded-xl bg-slate-100 p-4 text-sm leading-6 text-slate-700 whitespace-pre-wrap break-words">
+        <div className="max-h-40 overflow-auto rounded-xl bg-slate-100 p-4 text-sm leading-6 text-slate-700 whitespace-pre-wrap break-words">
           {value}
-        </pre>
+        </div>
       );
     }
     return <span className="text-slate-700">{value}</span>;
@@ -101,7 +130,7 @@ function ReviewContent() {
   const [reviewedCount, setReviewedCount] = useState(0);
   const [completed, setCompleted] = useState(false);
 
-  const [history, setHistory] = useState([]); 
+  const [history, setHistory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -170,7 +199,7 @@ function ReviewContent() {
       setCurrentApplication(sanitizeApplicationObject(nextApplication));
       setCompleted(false);
       setLoading(false);
-      
+
       // Override standard count assignment with unified directory tracker
       void syncTrueQueueCount();
     } catch (submissionError) {
@@ -198,7 +227,7 @@ function ReviewContent() {
 
       setCurrentApplication(sanitizeApplicationObject(found));
       setCompleted(false);
-      
+
       void syncTrueQueueCount();
     } catch (err) {
       setError(getErrorMessage(err));
@@ -237,7 +266,7 @@ function ReviewContent() {
       } finally {
         setIsSearching(false);
       }
-    }, 500); 
+    }, 500);
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
@@ -287,7 +316,7 @@ function ReviewContent() {
       };
 
       setReviewedCount((currentCount) => currentCount + 1);
-      setHistory((prev) => [...prev, updatedCurrentApp]); 
+      setHistory((prev) => [...prev, updatedCurrentApp]);
       setCurrentApplication(updatedCurrentApp);
 
       setTimeout(async () => {
@@ -310,21 +339,21 @@ function ReviewContent() {
   function getApplicantDisplayName(app) {
     if (!app) return 'Loading...';
     const metadata = app.application_data || {};
-    
+
     const first = metadata.firstNameLegal || '';
     const last = metadata.lastNameLegal || '';
     const mergedName = `${first} ${last}`.trim();
-    
+
     return mergedName || app.applicant_email || 'Anonymous Applicant';
   }
 
   const applicationData = currentApplication?.application_data;
   const isApplicationObject = applicationData && typeof applicationData === 'object' && !Array.isArray(applicationData);
 
-  const rawStatus = 
-    currentApplication?._previous_session_decision || 
-    currentApplication?.status || 
-    currentApplication?.application_data?.status || 
+  const rawStatus =
+    currentApplication?._previous_session_decision ||
+    currentApplication?.status ||
+    currentApplication?.application_data?.status ||
     'pending';
 
   const activeStatus = (rawStatus === 'in_review' || !rawStatus) ? 'pending' : rawStatus;
@@ -431,17 +460,49 @@ function ReviewContent() {
               </div>
             ) : null}
 
-            <div className="mt-6 space-y-6">
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               {isApplicationObject ? (
-                Object.entries(applicationData).map(([key, value]) => {
-                  if (key === 'status' || key === '_previous_session_decision') return null;
-                  return (
-                    <div key={key} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/5">
-                      <dt className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">{humanizeKey(key)}</dt>
-                      <dd className="mt-3 text-base leading-7 text-slate-800">{renderFieldValue(value)}</dd>
-                    </div>
-                  );
-                })
+                (() => {
+                  const entries = Object.entries(applicationData)
+                    .filter(([key]) => key !== 'status' && key !== '_previous_session_decision')
+                    .sort(([a], [b]) => fieldSortWeight(a) - fieldSortWeight(b));
+
+                  const groups = [];
+                  for (let i = 0; i < entries.length; i++) {
+                    if (isNameField(entries[i][0])) {
+                      const nameGroup = [entries[i]];
+                      while (i + 1 < entries.length && isNameField(entries[i + 1][0])) {
+                        nameGroup.push(entries[++i]);
+                      }
+                      groups.push({ type: 'name', entries: nameGroup });
+                    } else {
+                      groups.push({ type: 'single', entry: entries[i] });
+                    }
+                  }
+
+                  return groups.map((group) => {
+                    if (group.type === 'name') {
+                      return (
+                        <div key={group.entries.map(([k]) => k).join('-')} className="col-span-1 md:col-span-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/5">
+                          <div className="grid grid-cols-3 gap-3">
+                            {group.entries.map(([key, value]) => (
+                              <div key={key}>
+                                <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{humanizeKey(key)}</dt>
+                                <dd className="mt-1.5 text-sm leading-6 text-slate-800">{renderFieldValue(value)}</dd>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={group.entry[0]} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-900/5">
+                        <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{humanizeKey(group.entry[0])}</dt>
+                        <dd className="mt-1.5 text-sm leading-6 text-slate-800">{renderFieldValue(group.entry[1])}</dd>
+                      </div>
+                    );
+                  });
+                })()
               ) : (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-base leading-7 text-amber-900">
                   <p className="font-semibold">Could not parse application data fields.</p>
@@ -514,19 +575,19 @@ function ReviewContent() {
   );
 }
 
-function DashboardShell({ 
-  children, 
-  searchQuery, 
-  setSearchQuery, 
-  isSearching, 
-  searchResults, 
-  handleSelectSearchResult, 
-  initialUnreviewedCount 
+function DashboardShell({
+  children,
+  searchQuery,
+  setSearchQuery,
+  isSearching,
+  searchResults,
+  handleSelectSearchResult,
+  initialUnreviewedCount
 }) {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,23,42,0.08),_transparent_38%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-8 py-10">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-7xl flex-col gap-6">
-        
+
         <header className="flex w-full items-center justify-between gap-6 rounded-[2rem] border border-slate-200 bg-white p-8 shadow-2xl shadow-slate-900/5">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">Application Review</h1>
@@ -545,7 +606,7 @@ function DashboardShell({
               placeholder="Search name or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/5 transition"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:border-slate-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/5 transition"
             />
             {isSearching && (
               <div className="absolute right-4 top-3.5 flex items-center text-xs font-semibold uppercase tracking-wider text-slate-400">
